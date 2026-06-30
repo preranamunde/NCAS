@@ -1,0 +1,452 @@
+/* CriminalImageSearchModal.css
+   Self-contained, compact styling for the photo/vector search modal.
+   Only modal-overlay / modal-card / modal-header / modal-close-btn / form-error /
+   cf-actions / cf-btn-cancel / cf-btn-submit are shared with CriminalForm
+   (defined in TablePage.css) — every override below is scoped under
+   .cis-modal-card so CriminalForm's own look is never affected. */
+
+.cis-modal-card {
+  max-width: 600px;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2), 0 4px 10px rgba(15, 23, 42, 0.07);
+  overflow: hidden;
+}
+
+.cis-modal-card .modal-hicon {
+  background: linear-gradient(135deg, #fee2e2, #fecaca);
+}
+
+.cis-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Panels (cards) ───────────────────────────────────────────────────────── */
+
+.cis-panel {
+  border: 1px solid #edf0f5;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fbfcfe;
+  animation: cis-fade-in 0.15s ease;
+  transition: opacity 0.15s ease;
+}
+
+@keyframes cis-fade-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cis-panel-disabled {
+  opacity: 0.45;
+}
+
+.cis-panel-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cis-panel-icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid #e7eaf0;
+}
+
+.cis-icon-sm {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+.cis-icon-photo    { background: #eff6ff; border-color: #dbeafe; }
+.cis-icon-vector   { background: #f5f3ff; border-color: #e6e1fb; }
+.cis-icon-settings { background: #fff7ed; border-color: #fde6c7; }
+.cis-icon-results  { background: #ecfdf5; border-color: #c9f4e2; }
+
+.cis-panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+}
+
+.cis-panel-sub {
+  font-size: 10px;
+  color: #7c8aa0;
+  margin-top: 1px;
+}
+
+/* ── Photo dropzone (compact) ─────────────────────────────────────────────── */
+
+.cis-photo-preview-sm {
+  width: 100%;
+  max-height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e4e8ef;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.cis-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 10px;
+  border: 1.5px dashed #d6dce6;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cis-dropzone-compact {
+  padding: 8px 10px;
+}
+
+.cis-dropzone:hover {
+  border-color: #A32D2D;
+  background: #fff8f8;
+}
+
+.cis-dropzone-icon {
+  color: #94a3b8;
+  display: flex;
+}
+
+.cis-dropzone:hover .cis-dropzone-icon {
+  color: #A32D2D;
+}
+
+.cis-dropzone-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.cis-dropzone-text-file {
+  word-break: break-all;
+}
+
+.cis-dropzone-hint {
+  font-size: 9px;
+  color: #94a3b8;
+}
+
+.cis-dropzone-sm {
+  height: 100%;
+  min-height: 68px;
+  justify-content: center;
+}
+
+.cis-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+  background: #f8fafc;
+}
+
+/* ── Checkbox — single thin line, no card ────────────────────────────────── */
+
+.cis-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.cis-checkbox-wrap {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.cis-checkbox-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.cis-checkbox-box {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.4px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.cis-checkbox-input:checked + .cis-checkbox-box {
+  background: #A32D2D;
+  border-color: #A32D2D;
+}
+
+.cis-checkbox-tick {
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.cis-checkbox-input:checked + .cis-checkbox-box .cis-checkbox-tick {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.cis-checkbox-text {
+  font-size: 12px;
+  color: #334155;
+  line-height: 1.2;
+}
+
+.cis-checkbox-row:hover .cis-checkbox-text {
+  color: #A32D2D;
+}
+
+/* ── Vector row: text + file side by side ────────────────────────────────── */
+
+.cis-vector-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+@media (max-width: 520px) {
+  .cis-vector-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cis-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.cis-field-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.cis-lock-tag {
+  font-size: 9px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+.cis-textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 68px;
+  resize: vertical;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #1e293b;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cis-textarea:focus {
+  outline: none;
+  border-color: #A32D2D;
+  box-shadow: 0 0 0 3px rgba(163, 45, 45, 0.1);
+}
+
+/* ── Top K row — small inline field, no extra panel head ─────────────────── */
+
+.cis-topk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cis-topk-label {
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.cis-input {
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: #1e293b;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cis-input:focus {
+  outline: none;
+  border-color: #A32D2D;
+  box-shadow: 0 0 0 3px rgba(163, 45, 45, 0.1);
+}
+
+.cis-input-sm {
+  width: 56px;
+  margin-left: auto;
+}
+
+/* ── Result count badge ───────────────────────────────────────────────────── */
+
+.cis-result-count {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #16a34a;
+  background: #ecfdf5;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+/* ── Result cards ─────────────────────────────────────────────────────────── */
+
+.cis-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.cis-card {
+  position: relative;
+  border: 1px solid #e4e8ef;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
+}
+
+.cis-card:hover {
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
+  transform: translateY(-2px);
+}
+
+.cis-card-best {
+  border-color: #A32D2D;
+  box-shadow: 0 0 0 1px rgba(163, 45, 45, 0.25);
+}
+
+.cis-card-img-wrap {
+  position: relative;
+  width: 100%;
+  height: 100px;
+  background: #f1f5f9;
+}
+
+.cis-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cis-card-img-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: #A32D2D;
+  background: #fde8e8;
+}
+
+.cis-best-tag {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+  background: #A32D2D;
+  border-radius: 999px;
+  padding: 1.5px 6px;
+}
+
+.cis-score-badge {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(15, 23, 42, 0.72);
+  border-radius: 999px;
+  padding: 1.5px 6px;
+}
+
+.cis-card-body {
+  padding: 6px 8px 8px;
+}
+
+.cis-card-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cis-card-id {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 1px;
+}
+
+.cis-empty {
+  padding: 14px 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+/* ── Action buttons polish (scoped to this modal only) ───────────────────── */
+
+.cis-modal-card .cf-btn-submit {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.cis-modal-card .cf-btn-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(163, 45, 45, 0.25);
+}

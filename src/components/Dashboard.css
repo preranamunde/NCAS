@@ -1,0 +1,41 @@
+.dashboard-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  text-align: center;
+  border-top: 1px solid #ccc;
+  padding: 30px 0;
+}
+
+.dashboard-content h1 {
+  font-size: 36px;
+  color: #003366;
+  margin-bottom: 8px;
+}
+
+.dashboard-content h2 {
+  font-size: 20px;
+  color: #555;
+  font-weight: 500;
+  margin-bottom: 24px;
+}
+
+.banner-image {
+  width: 100%;
+}
+
+.banner-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .dashboard-content h1 {
+    font-size: 26px;
+  }
+  .dashboard-content h2 {
+    font-size: 16px;
+  }
+}

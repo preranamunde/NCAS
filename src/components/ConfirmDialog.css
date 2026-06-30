@@ -1,0 +1,99 @@
+/* ConfirmDialog.css */
+
+.cd-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.cd-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 32px 28px 24px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: cd-pop 0.18s ease;
+}
+
+@keyframes cd-pop {
+  from { transform: scale(0.92); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+.cd-icon {
+  width: 56px;
+  height: 56px;
+  background: #fee2e2;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.cd-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px;
+}
+
+.cd-message {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+.cd-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.cd-btn-cancel,
+.cd-btn-confirm {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.cd-btn-cancel {
+  background: #f1f5f9;
+  color: #374151;
+  border: 1px solid #e2e8f0;
+}
+
+.cd-btn-cancel:hover:not(:disabled) {
+  background: #e2e8f0;
+}
+
+.cd-btn-confirm {
+  background: #dc2626;
+  color: #fff;
+}
+
+.cd-btn-confirm:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.cd-btn-cancel:disabled,
+.cd-btn-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

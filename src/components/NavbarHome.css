@@ -1,0 +1,73 @@
+.navbar-home {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #003366;
+  padding: 10px 30px;
+}
+
+.nav-links-home {
+  list-style: none;
+  display: flex;
+  gap: 30px;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-links-home a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 6px 4px;
+  border-bottom: 2px solid transparent;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.nav-links-home a:hover {
+  color: #ffcc99;
+}
+
+.nav-links-home a.active {
+  border-bottom: 2px solid #ff6600;
+  color: #ff6600;
+}
+
+/* ── Profile icon button (replaces old .profile-icon div) ── */
+.profile-icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, box-shadow 0.15s;
+  padding: 0;
+}
+
+.profile-icon-btn:hover {
+  background: #ffe0cc;
+  box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.3);
+}
+
+.profile-icon-btn svg {
+  width: 20px;
+  height: 20px;
+  color: #003366;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .navbar-home {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .nav-links-home {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
