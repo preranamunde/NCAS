@@ -416,7 +416,7 @@ const Criminals = () => {
               className={`add-btn search-trigger-btn${isMyProfileMode ? ' filter-toggle-btn--active' : ''}`}
               onClick={() => loadMyProfile(1)}
             >
-              <ProfileIcon /> My Profile
+              <ProfileIcon /> My List
             </button>
             <button
               className="add-btn search-trigger-btn"
