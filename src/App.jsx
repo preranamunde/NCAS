@@ -13,6 +13,13 @@ import CriminalDetailPage from './pages/CriminalDetailPage';
 import VehicleDetail from './pages/VehicleDetail';
 import './App.css';
 import VehicleMappingDetail from './pages/VehicleMappingDetail';
+import MissingHomePage from './pages/MissingHomePage';
+import AddMissingReport from './pages/AddMissingReport';
+import ListMissingPersons from './pages/ListMissingPersons';
+import MissingPersons from './pages/MissingPersons';
+import MissingPersonDetail from './pages/MissingPersonDetailPage';
+import MissingPersonFullDetail from './pages/MissingPersonFullDetail';
+
 
 function LandingPage() {
   return (
@@ -39,6 +46,13 @@ function App() {
         <Route path="/criminals/:id" element={<CriminalDetailPage />} />
         <Route path="/vehicles/:vehicleNumber" element={<VehicleDetail />} />
         <Route path="/vehicle-mapping/:mappingId" element={<VehicleMappingDetail />} />
+        <Route path="/missing-persons" element={<MissingPersons/>}/>
+        <Route path="/missing-home" element={<MissingHomePage />} />
+        <Route path="/missing/add-report" element={<AddMissingReport />} />
+        <Route path="/missing/add-report/:id" element={<AddMissingReport />} />
+        <Route path="/missing/list" element={<ListMissingPersons />} />
+        <Route path="/missing/details/:id" element={<MissingPersonFullDetail />} />
+        <Route path="/missingpersons/:id" element={<MissingPersonDetail />} />
       </Routes>
     </BrowserRouter>
   );

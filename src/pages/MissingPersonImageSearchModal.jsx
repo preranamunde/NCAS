@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import './VehicleImageSearchModal.css';
-import { searchVehiclesByImageApi } from '../api/authApi';
+import './MissingPersonImageSearchModal.css';
+import { searchMissingPersonsByImageApi } from '../api/authApi';
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
 const CameraIcon = () => (
@@ -30,20 +30,27 @@ const DocumentIcon = () => (
 );
 
 const CheckTick = () => (
-  <svg className="vis-checkbox-tick" viewBox="0 0 16 16" width="9" height="9">
+  <svg className="mis-checkbox-tick" viewBox="0 0 16 16" width="9" height="9">
     <polyline points="2,8 6,12 14,3" fill="none" stroke="#fff" strokeWidth="2.6"
       strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── helpers ──────────────────────────────────────────────────────────────────
 function buildImageProxyUrl(rawUrl) {
   if (!rawUrl) return null;
   return rawUrl.replace(/^https?:\/\/[^/]+/, '');
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
-export default function VehicleImageSearchModal({ isOpen, onClose }) {
+// Mirrors CriminalImageSearchModal, but posts to /search/missingperson via
+// searchMissingPersonsByImageApi (person_image / image_vector / image_vector_file / topK).
+//
+// NOTE: searchMissingPersonsByImageApi now returns a paginated shape
+// { data, total, page, limit } (to match the vehicles/officers/criminals APIs).
+// This modal is a top-K similarity search, not a paged table, so we just
+// unwrap `.data` — the page/total/limit fields aren't used here.
+export default function MissingPersonImageSearchModal({ isOpen, onClose }) {
   const navigate = useNavigate();
 
   const [imagePreview, setImagePreview] = useState(null);
@@ -51,8 +58,8 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
 
   const [useVectorSearch, setUseVectorSearch] = useState(false);
 
-  const [embeddingText, setEmbeddingText] = useState('');
-  const [embeddingFile, setEmbeddingFile] = useState(null);
+  const [imageVectorText, setImageVectorText] = useState('');
+  const [imageVectorFile, setImageVectorFile] = useState(null);
   const [vectorInputMode, setVectorInputMode] = useState(null); // null | 'text' | 'file'
 
   const [topK, setTopK] = useState('3');
@@ -62,7 +69,7 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
   const [results, setResults] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
 
-  // ── Image upload ──
+  // ── Photo upload ──
   const handleImageChange = (e) => {
     const file = e.target.files?.[0] || null;
     selectedImageFileRef.current = file;
@@ -72,7 +79,6 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
     setImagePreview(file ? URL.createObjectURL(file) : null);
   };
 
-  // ── Checkbox toggle ──
   const handleToggleVectorMode = (e) => {
     const checked = e.target.checked;
     setUseVectorSearch(checked);
@@ -84,16 +90,15 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
       }
       setImagePreview(null);
     } else {
-      setEmbeddingText('');
-      setEmbeddingFile(null);
+      setImageVectorText('');
+      setImageVectorFile(null);
       setVectorInputMode(null);
     }
   };
 
-  // ── Embedding text / file — mutually exclusive ──
-  const handleEmbeddingTextChange = (e) => {
+  const handleImageVectorTextChange = (e) => {
     const value = e.target.value;
-    setEmbeddingText(value);
+    setImageVectorText(value);
     if (value.trim()) {
       setVectorInputMode('text');
     } else if (vectorInputMode === 'text') {
@@ -101,9 +106,9 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
     }
   };
 
-  const handleEmbeddingFileChange = (e) => {
+  const handleImageVectorFileChange = (e) => {
     const file = e.target.files?.[0] || null;
-    setEmbeddingFile(file);
+    setImageVectorFile(file);
     if (file) {
       setVectorInputMode('file');
     } else if (vectorInputMode === 'file') {
@@ -118,8 +123,8 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
     }
     setImagePreview(null);
     setUseVectorSearch(false);
-    setEmbeddingText('');
-    setEmbeddingFile(null);
+    setImageVectorText('');
+    setImageVectorFile(null);
     setVectorInputMode(null);
     setTopK('3');
     setResults(null);
@@ -132,26 +137,26 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
     onClose();
   };
 
-  // ── Navigate to vehicle detail page, closing the modal first ──
-  const handleResultClick = (vehicleNumber) => {
+  // ── Navigate to missing person detail page, closing the modal first ──
+  const handleResultClick = (personId) => {
     handleClose();
-    navigate(`/vehicles/${vehicleNumber}`);
+    navigate(`/missingpersons/${personId}`);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
-    const imageFile        = selectedImageFileRef.current;
-    const hasImage         = !useVectorSearch && !!imageFile;
-    const hasEmbeddingText = useVectorSearch && vectorInputMode === 'text' && embeddingText.trim() !== '';
-    const hasEmbeddingFile = useVectorSearch && vectorInputMode === 'file' && !!embeddingFile;
+    const imageFile     = selectedImageFileRef.current;
+    const hasImage      = !useVectorSearch && !!imageFile;
+    const hasVectorText = useVectorSearch && vectorInputMode === 'text' && imageVectorText.trim() !== '';
+    const hasVectorFile = useVectorSearch && vectorInputMode === 'file' && !!imageVectorFile;
 
-    if (!hasImage && !hasEmbeddingText && !hasEmbeddingFile) {
+    if (!hasImage && !hasVectorText && !hasVectorFile) {
       setError(
         useVectorSearch
-          ? 'Provide an embedding vector, or upload an embedding file, to search by.'
-          : 'Upload a vehicle photo to search by.'
+          ? 'Provide an image vector, or upload a vector file, to search by.'
+          : 'Upload a photo to search by.'
       );
       return;
     }
@@ -159,16 +164,19 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
     setSubmitting(true);
     try {
       const fd = new FormData();
-      if (hasImage)         fd.append('vehicle_image', imageFile);
-      if (hasEmbeddingText) fd.append('embedding', embeddingText.trim());
-      if (hasEmbeddingFile) fd.append('embedding_file', embeddingFile);
+      if (hasImage)      fd.append('person_image', imageFile);
+      if (hasVectorText) fd.append('image_vector', imageVectorText.trim());
+      if (hasVectorFile) fd.append('image_vector_file', imageVectorFile);
       fd.append('topK', topK.trim() ? topK.trim() : '3');
 
-      const matches = await searchVehiclesByImageApi(fd);
-      setResults(Array.isArray(matches) ? matches : []);
+      // searchMissingPersonsByImageApi returns { data, total, page, limit }.
+      // This is a top-K similarity search, not a paged list, so we only need `.data`.
+      const response = await searchMissingPersonsByImageApi(fd);
+      const matches  = Array.isArray(response?.data) ? response.data : [];
+      setResults(matches);
       setHasSearched(true);
     } catch (err) {
-      console.error('[VehicleImageSearchModal] Search failed:', err);
+      console.error('[MissingPersonImageSearchModal] Search failed:', err);
       setError(err.message || 'Search failed. Please try again.');
       setResults([]);
       setHasSearched(true);
@@ -181,7 +189,7 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-card vis-modal-card">
+      <div className="modal-card mis-modal-card">
 
         {/* Header */}
         <div className="modal-header">
@@ -190,40 +198,40 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
               <CameraIcon />
             </div>
             <div>
-              <h2 className="modal-title">Search Vehicle by Image</h2>
-              <p className="modal-sub">Find the closest matching vehicles in the database</p>
+              <h2 className="modal-title">Search Missing Person by Image</h2>
+              <p className="modal-sub">Find the closest matching records in the database</p>
             </div>
           </div>
           <button className="modal-close-btn" onClick={handleClose} aria-label="Close">✕</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="vis-form">
+        <form onSubmit={handleSubmit} className="mis-form">
           {error && <div className="form-error">{error}</div>}
 
-          <div className="form-body vis-body vis-scroll">
+          <div className="form-body mis-body">
 
             {/* Photo panel */}
-            <div className={`vis-panel vis-panel-photo${useVectorSearch ? ' vis-panel-disabled' : ''}`}>
-              <div className="vis-panel-head">
-                <span className="vis-panel-icon vis-icon-photo">🚗</span>
+            <div className={`mis-panel mis-panel-photo${useVectorSearch ? ' mis-panel-disabled' : ''}`}>
+              <div className="mis-panel-head">
+                <span className="mis-panel-icon mis-icon-photo">🖼️</span>
                 <div>
-                  <div className="vis-panel-title">Vehicle photo</div>
-                  <div className="vis-panel-sub">Upload a clear photo of the vehicle</div>
+                  <div className="mis-panel-title">Person's photo</div>
+                  <div className="mis-panel-sub">Upload a clear, front-facing photo</div>
                 </div>
               </div>
 
               {imagePreview && (
-                <img src={imagePreview} alt="Selected vehicle" className="vis-photo-preview-sm" />
+                <img src={imagePreview} alt="Selected person" className="mis-photo-preview-sm" />
               )}
 
-              <label className="vis-dropzone vis-dropzone-compact" htmlFor="vis-img-input">
-                <span className="vis-dropzone-icon"><UploadIcon /></span>
-                <span className="vis-dropzone-text">
+              <label className="mis-dropzone mis-dropzone-compact" htmlFor="mis-img-input">
+                <span className="mis-dropzone-icon"><UploadIcon /></span>
+                <span className="mis-dropzone-text">
                   {imagePreview ? 'Click to change photo' : 'Click to upload a photo'}
                 </span>
-                <span className="vis-dropzone-hint">JPG, PNG or WEBP — max 5 MB</span>
+                <span className="mis-dropzone-hint">JPG, PNG or WEBP — max 5 MB</span>
                 <input
-                  id="vis-img-input"
+                  id="mis-img-input"
                   type="file"
                   accept="image/*"
                   onChange={handleImageChange}
@@ -234,72 +242,72 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
             </div>
 
             {/* Checkbox */}
-            <label className="vis-checkbox-row">
-              <span className="vis-checkbox-wrap">
+            <label className="mis-checkbox-row">
+              <span className="mis-checkbox-wrap">
                 <input
                   type="checkbox"
-                  className="vis-checkbox-input"
+                  className="mis-checkbox-input"
                   checked={useVectorSearch}
                   onChange={handleToggleVectorMode}
                 />
-                <span className="vis-checkbox-box">
+                <span className="mis-checkbox-box">
                   <CheckTick />
                 </span>
               </span>
-              <span className="vis-checkbox-text">
-                Search using an embedding vector instead of a photo
+              <span className="mis-checkbox-text">
+                Search using an image vector instead of a photo
               </span>
             </label>
 
             {/* Vector panel */}
             {useVectorSearch && (
-              <div className="vis-panel vis-panel-vector">
-                <div className="vis-panel-head">
-                  <span className="vis-panel-icon vis-icon-vector">🧬</span>
+              <div className="mis-panel mis-panel-vector">
+                <div className="mis-panel-head">
+                  <span className="mis-panel-icon mis-icon-vector">🧬</span>
                   <div>
-                    <div className="vis-panel-title">Embedding vector</div>
-                    <div className="vis-panel-sub">Text or file — only one is used at a time</div>
+                    <div className="mis-panel-title">Image vector</div>
+                    <div className="mis-panel-sub">Text or file — only one is used at a time</div>
                   </div>
                 </div>
 
-                <div className="vis-vector-row">
-                  <div className="vis-field">
-                    <label className="vis-field-label">
+                <div className="mis-vector-row">
+                  <div className="mis-field">
+                    <label className="mis-field-label">
                       Vector text
                       {vectorInputMode === 'file' && (
-                        <span className="vis-lock-tag">🔒 file selected</span>
+                        <span className="mis-lock-tag">🔒 file selected</span>
                       )}
                     </label>
                     <textarea
                       rows={3}
                       placeholder="[0.123, -0.456, ...]"
-                      value={embeddingText}
-                      onChange={handleEmbeddingTextChange}
+                      value={imageVectorText}
+                      onChange={handleImageVectorTextChange}
                       disabled={vectorInputMode === 'file'}
-                      className={`vis-textarea${vectorInputMode === 'file' ? ' vis-disabled' : ''}`}
+                      className={`mis-textarea${vectorInputMode === 'file' ? ' mis-disabled' : ''}`}
                     />
                   </div>
 
-                  <div className="vis-field">
-                    <label className="vis-field-label">
+                  <div className="mis-field">
+                    <label className="mis-field-label">
                       Vector file (.json)
                       {vectorInputMode === 'text' && (
-                        <span className="vis-lock-tag">🔒 text entered</span>
+                        <span className="mis-lock-tag">🔒 text entered</span>
                       )}
                     </label>
                     <label
-                      htmlFor="vis-vec-file-input"
-                      className={`vis-dropzone vis-dropzone-sm${vectorInputMode === 'text' ? ' vis-disabled' : ''}`}
+                      htmlFor="mis-vec-file-input"
+                      className={`mis-dropzone mis-dropzone-sm${vectorInputMode === 'text' ? ' mis-disabled' : ''}`}
                     >
-                      <span className="vis-dropzone-icon"><DocumentIcon /></span>
-                      <span className="vis-dropzone-text vis-dropzone-text-file">
-                        {embeddingFile ? embeddingFile.name : 'Click to upload .json'}
+                      <span className="mis-dropzone-icon"><DocumentIcon /></span>
+                      <span className="mis-dropzone-text mis-dropzone-text-file">
+                        {imageVectorFile ? imageVectorFile.name : 'Click to upload .json'}
                       </span>
                       <input
-                        id="vis-vec-file-input"
+                        id="mis-vec-file-input"
                         type="file"
                         accept=".json,application/json"
-                        onChange={handleEmbeddingFileChange}
+                        onChange={handleImageVectorFileChange}
                         disabled={vectorInputMode === 'text'}
                         style={{ display: 'none' }}
                       />
@@ -310,10 +318,10 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
             )}
 
             {/* Top K */}
-            <div className="vis-panel vis-panel-settings">
-              <div className="vis-topk-row">
-                <span className="vis-panel-icon vis-icon-settings vis-icon-sm">🎯</span>
-                <label className="vis-field-label vis-topk-label">Top K results</label>
+            <div className="mis-panel mis-panel-settings">
+              <div className="mis-topk-row">
+                <span className="mis-panel-icon mis-icon-settings mis-icon-sm">🎯</span>
+                <label className="mis-field-label mis-topk-label">Top K results</label>
                 <input
                   type="number"
                   min="1"
@@ -321,76 +329,77 @@ export default function VehicleImageSearchModal({ isOpen, onClose }) {
                   placeholder="3"
                   value={topK}
                   onChange={(e) => setTopK(e.target.value)}
-                  className="vis-input vis-input-sm"
+                  className="mis-input mis-input-sm"
                 />
               </div>
             </div>
 
             {/* Results */}
             {hasSearched && (
-              <div className="vis-panel vis-panel-results">
-                <div className="vis-panel-head">
-                  <span className="vis-panel-icon vis-icon-results">🔎</span>
+              <div className="mis-panel mis-panel-results">
+                <div className="mis-panel-head">
+                  <span className="mis-panel-icon mis-icon-results">🔎</span>
                   <div>
-                    <div className="vis-panel-title">
+                    <div className="mis-panel-title">
                       Matches
                       {results && results.length > 0 && (
-                        <span className="vis-result-count">{results.length} found</span>
+                        <span className="mis-result-count">{results.length} found</span>
                       )}
                     </div>
-                    <div className="vis-panel-sub">
-                      Closest vehicles, ranked by similarity score — click any card to view details
+                    <div className="mis-panel-sub">
+                      Closest records, ranked by similarity score — click any card to view details
                     </div>
                   </div>
                 </div>
 
                 {results && results.length > 0 ? (
-                  <div className="vis-results-grid">
+                  <div className="mis-results-grid">
                     {results.map((r, idx) => {
-                      const rawUrl   = r.image_url || r.vehicle_image_url || r.vehicle_image || null;
+                      const rawUrl   = r.image_url || r.person_image_url || r.profile_image_url || null;
                       const proxyUrl = buildImageProxyUrl(rawUrl);
                       const isBest   = idx === 0;
+                      const personId = r.person_id ?? r.id;
                       return (
                         <div
-                          className={`vis-card${isBest ? ' vis-card-best' : ''} vis-card-clickable`}
-                          key={r.vehicle_number ?? idx}
-                          onClick={() => handleResultClick(r.vehicle_number)}
-                          title={`View details for ${r.vehicle_number || 'vehicle'}`}
+                          className={`mis-card${isBest ? ' mis-card-best' : ''} mis-card-clickable`}
+                          key={personId ?? idx}
+                          onClick={() => handleResultClick(personId)}
+                          title={`View details for ${r.person_name || 'person'}`}
                           role="button"
                           tabIndex={0}
-                          onKeyDown={(e) => e.key === 'Enter' && handleResultClick(r.vehicle_number)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleResultClick(personId)}
                         >
-                          <div className="vis-card-img-wrap">
+                          <div className="mis-card-img-wrap">
                             {proxyUrl ? (
                               <img
                                 src={proxyUrl}
-                                alt={r.vehicle_number || 'Vehicle'}
-                                className="vis-card-img"
+                                alt={r.person_name || 'Missing person'}
+                                className="mis-card-img"
                                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
                               />
                             ) : (
-                              <div className="vis-card-img-fallback">🚗</div>
+                              <div className="mis-card-img-fallback">
+                                {r.person_name?.charAt(0) || 'P'}
+                              </div>
                             )}
-                            {isBest && <span className="vis-best-tag">Best match</span>}
+                            {isBest && <span className="mis-best-tag">Best match</span>}
                             {typeof r.score !== 'undefined' && (
-                              <span className="vis-score-badge">
+                              <span className="mis-score-badge">
                                 {typeof r.score === 'number' ? r.score.toFixed(3) : r.score}
                               </span>
                             )}
                           </div>
-                          <div className="vis-card-body">
-                            <div className="vis-card-number">{r.vehicle_number || 'Unknown'}</div>
-                            <div className="vis-card-meta">
-                              {r.vehicle_model || '—'}{r.vehicle_type ? ` · ${r.vehicle_type}` : ''}
-                            </div>
-                            <div className="vis-card-view-hint">View details →</div>
+                          <div className="mis-card-body">
+                            <div className="mis-card-name">{r.person_name || 'Unknown'}</div>
+                            <div className="mis-card-id">#{personId}</div>
+                            <div className="mis-card-view-hint">View profile →</div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <p className="vis-empty">No matching vehicles found.</p>
+                  <p className="mis-empty">No matching records found.</p>
                 )}
               </div>
             )}

@@ -13,25 +13,30 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
+  e.preventDefault();
+  setError(null);
+  setLoading(true);
 
-    try {
-      const data = await loginApi(officerId, password);
+  try {
+    const data = await loginApi(officerId, password);
 
-      // Store tokens
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      localStorage.setItem('officerId', officerId);
+    // Store tokens
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+    localStorage.setItem('officerId', officerId);
 
+    // Special routing: this specific officer gets the Missing Persons dashboard
+    if (officerId.trim().toUpperCase() === 'OFF10010') {
+      navigate('/missing-home');
+    } else {
       navigate('/home');
-    } catch (err) {
-      setError(err.message || 'Invalid Officer ID or Password');
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (err) {
+    setError(err.message || 'Invalid Officer ID or Password');
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <>

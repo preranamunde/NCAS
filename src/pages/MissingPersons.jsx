@@ -1,18 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import NavbarHome from '../components/NavbarHome';
-import VehicleForm from './VehicleForm';
-import VehicleImageSearchModal from './VehicleImageSearchModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import MissingPersonForm from './MissingPersonsForm';
+import MissingPersonImageSearchModal from './MissingPersonImageSearchModal';
 import {
-  getVehiclesApi,
-  getVehiclesByOfficerApi,
-  createVehicleApi,
-  updateVehicleApi,
-  updateVehicleImageApi,
-  deleteVehicleApi,
-  searchVehiclesApi,
+  getMissingPersonsApi,
+  getMissingPersonsByOfficerApi,
+  createMissingPersonApi,
+  updateMissingPersonApi,
+  updateMissingPersonImageApi,
+  deleteMissingPersonApi,
+  searchMissingPersonsApi,
 } from '../api/authApi';
 import './TablePage.css';
 
@@ -23,7 +23,7 @@ const ExpandIcon = () => (
     <polyline points="15 3 21 3 21 9"/>
     <polyline points="9 21 3 21 3 15"/>
     <line x1="21" y1="3" x2="14" y2="10"/>
-    <line x1="3" y1="21" x2="10" y2="14"/>
+    <line x1="3"  y1="21" x2="10" y2="14"/>
   </svg>
 );
 
@@ -77,40 +77,6 @@ const BackIcon = () => (
   </svg>
 );
 
-// ─── Vehicle thumbnail ────────────────────────────────────────────────────────
-function VehicleThumb({ vehicle }) {
-  const [failed, setFailed] = useState(false);
-  const src =
-    vehicle?.vehicle_image_url ||
-    vehicle?.vehicle_image     ||
-    vehicle?.image_url         ||
-    null;
-
-  if (src && !failed) {
-    return (
-      <img
-        src={src}
-        alt={vehicle.vehicle_number}
-        onError={() => setFailed(true)}
-        style={{
-          width: 48, height: 38, objectFit: 'cover',
-          borderRadius: 6, border: '1px solid #e5e7eb', display: 'block',
-        }}
-      />
-    );
-  }
-  return (
-    <div style={{
-      width: 48, height: 38, borderRadius: 6,
-      background: '#f1f5f9', border: '1px dashed #cbd5e1',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: '#94a3b8', fontSize: 18,
-    }}>
-      🚗
-    </div>
-  );
-}
-
 // ─── Pagination component ────────────────────────────────────────────────────
 function Pagination({ total, page, limit, onPageChange }) {
   const totalPages = Math.ceil(total / limit);
@@ -137,7 +103,7 @@ function Pagination({ total, page, limit, onPageChange }) {
       flexWrap: 'wrap', gap: 10,
     }}>
       <span style={{ fontSize: 12, color: '#64748b' }}>
-        Showing {Math.min((page - 1) * limit + 1, total)}–{Math.min(page * limit, total)} of {total} vehicles
+        Showing {Math.min((page - 1) * limit + 1, total)}–{Math.min(page * limit, total)} of {total} missing persons
       </span>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -206,58 +172,87 @@ function Pagination({ total, page, limit, onPageChange }) {
   );
 }
 
-// ─── Filter state ────────────────────────────────────────────────────────────
+// ─── Empty filter state ──────────────────────────────────────────────────────
 const EMPTY_FILTERS = {
-  vehicle_number: '', vehicle_make: '', vehicle_model: '',
-  vehicle_type: '', vehicle_state: '', vehicle_district: '',
-  set_by_officer: '', alert_status: '',
+  person_name:   '',
+  person_mobile: '',
+  alert_status:  '',
 };
 
 const PAGE_LIMIT = 10;
 
-// ─── Main Vehicles page ──────────────────────────────────────────────────────
-export default function Vehicles() {
+// ─── Location resolver ────────────────────────────────────────────────────
+// The real API nests location under person_state / person_district objects:
+//   person_state:    { state_code, state_name }
+//   person_district: { district_code, district_name, state_code }
+// Flat state_name/district_name are checked too as a fallback.
+function getLocationLabel(person) {
+  const district =
+    person.person_district?.district_name ||
+    person.district_name ||
+    '';
+  const state =
+    person.person_state?.state_name ||
+    person.state_name ||
+    '';
+  return [district, state].filter(Boolean).join(', ');
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+const MissingPersons = () => {
   const navigate = useNavigate();
 
-  // Current page of records, as returned by the backend (never sliced client-side)
-  const [items, setItems]   = useState([]);
-  const [total, setTotal]   = useState(0);
-  const [page, setPage]     = useState(1);
+  // Only the CURRENT page's records live here — never the whole dataset
+  const [persons, setPersons] = useState([]);
+  const [total, setTotal]     = useState(0);
+  const [page, setPage]       = useState(1);
 
   const [loading, setLoading]             = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [error, setError]                 = useState(null);
 
   // 'all' | 'search' | 'myProfile'
   const [viewMode, setViewMode] = useState('all');
 
-  const [isModalOpen, setIsModalOpen]       = useState(false);
-  const [editingVehicle, setEditingVehicle] = useState(null);
-  const [deleteTarget, setDeleteTarget]     = useState(null);
-  const [deleteLoading, setDeleteLoading]   = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters]         = useState(EMPTY_FILTERS);
+
+  // Edit modal
+  const [isModalOpen, setIsModalOpen]     = useState(false);
+  const [editingPerson, setEditingPerson] = useState(null);
+
+  // Image / vector search modal
   const [isImageSearchOpen, setIsImageSearchOpen] = useState(false);
-  const [showFilters, setShowFilters]       = useState(false);
-  const [filters, setFilters]               = useState(EMPTY_FILTERS);
 
-  const vehicleNumberEntered = filters.vehicle_number.trim() !== '';
-  const otherFieldsLocked    = vehicleNumberEntered;
+  const [deleteTarget, setDeleteTarget]   = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const activeFilterCount = Object.values(filters).filter((v) => v !== '').length;
+  const activeFilterCount = Object.values(filters).filter(
+    (v) => v.trim ? v.trim() !== '' : v !== ''
+  ).length;
 
   const isSearchMode    = viewMode === 'search';
   const isMyProfileMode = viewMode === 'myProfile';
 
-  // ── Load a page of ALL vehicles ───────────────────────────────────────────
-  const loadAll = useCallback(async (targetPage = 1) => {
+  // ── Load ONE page of ALL records — GET /missingpersons?page=&limit=&sortBy=&order=
+  const loadAll = useCallback(async (pageArg = 1) => {
     setLoading(true);
+    setError(null);
     try {
-      const res = await getVehiclesApi({ page: targetPage, limit: PAGE_LIMIT });
-      setItems(res.data);
-      setTotal(res.total);
-      setPage(res.page);
+      const result = await getMissingPersonsApi({
+        page: pageArg,
+        limit: PAGE_LIMIT,
+        sortBy: 'created_at',
+        order: 'desc',
+      });
+      setPersons(result.data);
+      setTotal(result.total);
+      setPage(result.page);
       setViewMode('all');
     } catch (err) {
-      console.error('Failed to load vehicles:', err);
-      setItems([]);
+      console.error('Failed to load missing persons:', err);
+      setError(err.message || 'Failed to load missing person records.');
+      setPersons([]);
       setTotal(0);
     } finally {
       setLoading(false);
@@ -266,75 +261,75 @@ export default function Vehicles() {
 
   useEffect(() => { loadAll(1); }, [loadAll]);
 
-  // ── Load a page of the logged-in officer's own vehicles ("My Profile") ────
-  const loadMyProfile = useCallback(async (targetPage = 1) => {
+  // ── Load ONE page of the logged-in officer's own reports —
+  //    GET /missingpersons/officer/:officerId?page=&limit=&sortBy=&order= ────
+  const loadMyProfile = useCallback(async (pageArg = 1) => {
     const officerId = localStorage.getItem('officerId');
     if (!officerId) {
       console.error('No officer ID found. Please login again.');
+      setError('No officer ID found. Please login again.');
       return;
     }
     setLoading(true);
+    setError(null);
     try {
-      const res = await getVehiclesByOfficerApi(officerId, { page: targetPage, limit: PAGE_LIMIT });
-      setItems(res.data);
-      setTotal(res.total);
-      setPage(res.page);
+      const result = await getMissingPersonsByOfficerApi(officerId, {
+        page: pageArg,
+        limit: PAGE_LIMIT,
+        sortBy: 'created_at',
+        order: 'desc',
+      });
+      setPersons(result.data);
+      setTotal(result.total);
+      setPage(result.page);
       setViewMode('myProfile');
     } catch (err) {
-      console.error('Failed to load my profile vehicles:', err);
-      setItems([]);
+      console.error('Failed to load my missing person reports:', err);
+      setError(err.message || 'Failed to load your missing person reports.');
+      setPersons([]);
       setTotal(0);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // ── Filter field change ───────────────────────────────────────────────────
   const handleFilterChange = (field, value) => {
-    setFilters((prev) => {
-      const next = { ...prev, [field]: value };
-      if (field === 'vehicle_number' && value.trim() !== '') {
-        next.vehicle_make = ''; next.vehicle_model = ''; next.vehicle_type = '';
-        next.vehicle_state = ''; next.vehicle_district = '';
-        next.set_by_officer = ''; next.alert_status = '';
-      }
-      return next;
-    });
+    setFilters((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleClearFilters = () => { setFilters(EMPTY_FILTERS); loadAll(1); };
+  const handleClearFilters = () => {
+    setFilters(EMPTY_FILTERS);
+    loadAll(1);
+  };
 
-  // ── Run search (paginated) ─────────────────────────────────────────────────
-  const runSearch = useCallback(async (targetPage = 1) => {
-    const hasAny = Object.values(filters).some((v) => v !== '');
+  // ── Run search (server-side paginated) ─────────────────────────────────────
+  const runSearch = useCallback(async (pageArg = 1) => {
+    const hasAny = Object.values(filters).some((v) => v.trim ? v.trim() !== '' : v !== '');
     if (!hasAny) { await loadAll(1); return; }
 
     setSearchLoading(true);
     try {
-      const res = await searchVehiclesApi({
-        vehicle_number:   filters.vehicle_number.trim(),
-        vehicle_make:     filters.vehicle_make.trim(),
-        vehicle_model:    filters.vehicle_model.trim(),
-        vehicle_type:     filters.vehicle_type.trim(),
-        vehicle_state:    filters.vehicle_state.trim(),
-        vehicle_district: filters.vehicle_district.trim(),
-        set_by_officer:   filters.set_by_officer.trim(),
-        alert_status:     filters.alert_status,
-        page:  targetPage,
+      const result = await searchMissingPersonsApi({
+        person_name:   filters.person_name.trim(),
+        person_mobile: filters.person_mobile.trim(),
+        alert_status:  filters.alert_status,
+        page: pageArg,
         limit: PAGE_LIMIT,
       });
-      setItems(res.data);
-      setTotal(res.total);
-      setPage(res.page);
+      setPersons(result.data);
+      setTotal(result.total);
+      setPage(result.page);
       setViewMode('search');
     } catch (err) {
-      console.error('Vehicle search failed:', err);
+      console.error('Search failed:', err);
     } finally {
       setSearchLoading(false);
     }
   }, [filters, loadAll]);
 
-  const handleSearchKeyDown = (e) => { if (e.key === 'Enter') runSearch(1); };
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') runSearch(1);
+  };
 
   // ── Refresh whatever view is currently active ──────────────────────────────
   const refreshCurrent = useCallback(async (targetPage) => {
@@ -343,64 +338,73 @@ export default function Vehicles() {
     return loadAll(targetPage);
   }, [viewMode, runSearch, loadMyProfile, loadAll]);
 
-  // ── Page change ──────────────────────────────────────────────────────────
+  // ── Page change — re-fetches from backend, no client slicing ──────────────
   const handlePageChange = (newPage) => {
     refreshCurrent(newPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // ── CRUD ──────────────────────────────────────────────────────────────────
+  // ── Create (POST /missingperson) ────────────────────────────────────────
+  const openCreateModal = () => { setEditingPerson(null); setIsModalOpen(true); };
+
+  // ── Edit (PUT /missingperson/:id) ───────────────────────────────────────
+  const openEditModal = (person) => { setEditingPerson(person); setIsModalOpen(true); };
+  const closeModal    = ()        => { setIsModalOpen(false);   setEditingPerson(null); };
+
   const handleCreate = async (formData) => {
-    await createVehicleApi(formData);
-    await refreshCurrent(1);
+    try {
+      await createMissingPersonApi(formData);
+      await refreshCurrent(1);
+      closeModal();
+    } catch (err) { console.error('Create missing person failed:', err); }
   };
 
   const handleUpdate = async (formData) => {
-    await updateVehicleApi(editingVehicle.vehicle_number, formData);
-    await refreshCurrent(page);
+    try {
+      await updateMissingPersonApi(editingPerson.person_id, formData);
+      await refreshCurrent(page);
+      closeModal();
+    } catch (err) { console.error('Update missing person failed:', err); }
   };
 
-  const handleImageOnly = async (vehicleNumber, formData) => {
-    await updateVehicleImageApi(vehicleNumber, formData);
-    await refreshCurrent(page);
+  // Image-only PUT (used internally by MissingPersonForm when only the photo changed)
+  const handleImageOnly = async (personId, formData) => {
+    try {
+      await updateMissingPersonImageApi(personId, formData);
+      await refreshCurrent(page);
+    } catch (err) { console.error('Image update failed:', err); }
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     setDeleteLoading(true);
     try {
-      await deleteVehicleApi(deleteTarget.vehicle_number);
-      const isLastOnPage = items.length === 1 && page > 1;
+      await deleteMissingPersonApi(deleteTarget.person_id);
+      const isLastOnPage = persons.length === 1 && page > 1;
       await refreshCurrent(isLastOnPage ? page - 1 : page);
-    } catch (err) {
-      console.error('Delete vehicle failed:', err);
-    } finally {
-      setDeleteLoading(false);
-      setDeleteTarget(null);
-    }
+    } catch (err) { console.error('Delete missing person failed:', err); }
+    finally { setDeleteLoading(false); setDeleteTarget(null); }
   };
 
-  const openCreateModal = () => { setEditingVehicle(null); setIsModalOpen(true); };
-  const openEditModal   = (v) => { setEditingVehicle(v);   setIsModalOpen(true); };
-  const closeModal      = () => { setIsModalOpen(false);   setEditingVehicle(null); };
-  const openDetailPage  = (vn) => navigate(`/vehicles/${vn}`);
+  // ── Expand icon → navigate to detail page, which fetches via
+  //    GET /missingperson/:id (getMissingPersonByIdApi-style call) ──────────
+  const openDetailPage = (id) => navigate(`/missingpersons/${id}`);
 
   const isActive = loading || searchLoading;
 
   const modeLabel = isSearchMode
     ? `${total} result${total !== 1 ? 's' : ''} found`
     : isMyProfileMode
-      ? `${total} vehicle${total !== 1 ? 's' : ''} added by you`
-      : `${total} vehicle${total !== 1 ? 's' : ''} total`;
+      ? `${total} missing person${total !== 1 ? 's' : ''} reported by you`
+      : `${total} missing person${total !== 1 ? 's' : ''} total`;
 
   return (
     <>
       <Header />
       <NavbarHome />
-
       <div className="table-page">
 
-        {/* ── Top bar ──────────────────────────────────────────────────────── */}
+        {/* ── Top bar ─────────────────────────────────────────────────────── */}
         <div className="table-header">
           <div className="criminals-header-left">
             <button
@@ -414,7 +418,6 @@ export default function Vehicles() {
               )}
             </button>
 
-            {/* Total count badge — always visible */}
             <span className="filter-result-count">{modeLabel}</span>
 
             {viewMode !== 'all' && (
@@ -423,7 +426,7 @@ export default function Vehicles() {
                 onClick={handleClearFilters}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
               >
-                <BackIcon /> Back to all vehicles
+                <BackIcon /> Back to all missing persons
               </button>
             )}
           </div>
@@ -441,17 +444,17 @@ export default function Vehicles() {
             >
               <ImageSearchIcon /> Search by Image
             </button>
-            <button className="add-btn" onClick={openCreateModal}>+ Add Vehicle</button>
+            <button className="add-btn" onClick={openCreateModal}>+ Add Missing Report</button>
           </div>
         </div>
 
-        {/* ── Filter panel ─────────────────────────────────────────────────── */}
+        {/* ── Horizontal Filter Panel ──────────────────────────────────────── */}
         {showFilters && (
           <div className="filter-panel">
             <div className="filter-panel__header">
               <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b',
                 textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-                Search Vehicles
+                Search Missing Persons
               </span>
               <button
                 className="filter-clear-link"
@@ -462,102 +465,28 @@ export default function Vehicles() {
               </button>
             </div>
 
-            {/* Row 1 */}
-            <div className="filter-row" style={{ marginBottom: 12 }}>
+            <div className="filter-row">
+
               <div className="filter-field">
-                <label className="filter-label">
-                  Vehicle Number
-                  {vehicleNumberEntered && (
-                    <span className="filter-lock-badge">🔒 other fields locked</span>
-                  )}
-                </label>
+                <label className="filter-label">Name</label>
                 <input
                   className="filter-input"
                   type="text"
-                  placeholder="e.g. MH04AB1234"
-                  value={filters.vehicle_number}
-                  onChange={(e) => handleFilterChange('vehicle_number', e.target.value)}
+                  placeholder="Full or partial name"
+                  value={filters.person_name}
+                  onChange={(e) => handleFilterChange('person_name', e.target.value)}
                   onKeyDown={handleSearchKeyDown}
                 />
               </div>
 
               <div className="filter-field">
-                <label className="filter-label">Make</label>
+                <label className="filter-label">Mobile Number</label>
                 <input
-                  className={`filter-input${otherFieldsLocked ? ' filter-input--locked' : ''}`}
+                  className="filter-input"
                   type="text"
-                  placeholder="e.g. Toyota"
-                  value={filters.vehicle_make}
-                  disabled={otherFieldsLocked}
-                  onChange={(e) => handleFilterChange('vehicle_make', e.target.value)}
-                  onKeyDown={handleSearchKeyDown}
-                />
-              </div>
-
-              <div className="filter-field">
-                <label className="filter-label">Model</label>
-                <input
-                  className={`filter-input${otherFieldsLocked ? ' filter-input--locked' : ''}`}
-                  type="text"
-                  placeholder="e.g. Innova"
-                  value={filters.vehicle_model}
-                  disabled={otherFieldsLocked}
-                  onChange={(e) => handleFilterChange('vehicle_model', e.target.value)}
-                  onKeyDown={handleSearchKeyDown}
-                />
-              </div>
-
-              <div className="filter-field">
-                <label className="filter-label">Type</label>
-                <input
-                  className={`filter-input${otherFieldsLocked ? ' filter-input--locked' : ''}`}
-                  type="text"
-                  placeholder="e.g. SUV, Sedan"
-                  value={filters.vehicle_type}
-                  disabled={otherFieldsLocked}
-                  onChange={(e) => handleFilterChange('vehicle_type', e.target.value)}
-                  onKeyDown={handleSearchKeyDown}
-                />
-              </div>
-            </div>
-
-            {/* Row 2 */}
-            <div className="filter-row">
-              <div className="filter-field">
-                <label className="filter-label">State</label>
-                <input
-                  className={`filter-input${otherFieldsLocked ? ' filter-input--locked' : ''}`}
-                  type="text"
-                  placeholder="e.g. Maharashtra"
-                  value={filters.vehicle_state}
-                  disabled={otherFieldsLocked}
-                  onChange={(e) => handleFilterChange('vehicle_state', e.target.value)}
-                  onKeyDown={handleSearchKeyDown}
-                />
-              </div>
-
-              <div className="filter-field">
-                <label className="filter-label">District</label>
-                <input
-                  className={`filter-input${otherFieldsLocked ? ' filter-input--locked' : ''}`}
-                  type="text"
-                  placeholder="e.g. Pune"
-                  value={filters.vehicle_district}
-                  disabled={otherFieldsLocked}
-                  onChange={(e) => handleFilterChange('vehicle_district', e.target.value)}
-                  onKeyDown={handleSearchKeyDown}
-                />
-              </div>
-
-              <div className="filter-field">
-                <label className="filter-label">Officer ID</label>
-                <input
-                  className={`filter-input${otherFieldsLocked ? ' filter-input--locked' : ''}`}
-                  type="text"
-                  placeholder="e.g. off10009"
-                  value={filters.set_by_officer}
-                  disabled={otherFieldsLocked}
-                  onChange={(e) => handleFilterChange('set_by_officer', e.target.value)}
+                  placeholder="e.g. 9876543210"
+                  value={filters.person_mobile}
+                  onChange={(e) => handleFilterChange('person_mobile', e.target.value)}
                   onKeyDown={handleSearchKeyDown}
                 />
               </div>
@@ -565,9 +494,8 @@ export default function Vehicles() {
               <div className="filter-field">
                 <label className="filter-label">Alert Status</label>
                 <select
-                  className={`filter-input filter-select${otherFieldsLocked ? ' filter-input--locked' : ''}`}
+                  className="filter-input filter-select"
                   value={filters.alert_status}
-                  disabled={otherFieldsLocked}
                   onChange={(e) => handleFilterChange('alert_status', e.target.value)}
                 >
                   <option value="">All</option>
@@ -588,13 +516,8 @@ export default function Vehicles() {
                   {searchLoading ? 'Searching…' : 'Search'}
                 </button>
               </div>
-            </div>
 
-            {vehicleNumberEntered && (
-              <p className="filter-id-tip">
-                💡 Searching by <strong>Vehicle Number</strong> — clear it to enable other filters.
-              </p>
-            )}
+            </div>
           </div>
         )}
 
@@ -602,59 +525,50 @@ export default function Vehicles() {
         <div className="table-card">
           {isActive ? (
             <div className="loading-text">{searchLoading ? 'Searching…' : 'Loading…'}</div>
+          ) : error ? (
+            <div className="loading-text">⚠️ {error}</div>
           ) : (
             <>
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Photo</th>
-                    <th>Vehicle Number</th>
-                    <th>Make</th>
-                    <th>Model</th>
-                    <th>Type</th>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Mobile</th>
+                    <th>Alert Status</th>
+                    <th>Location</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.length > 0 ? items.map((vehicle) => (
-                    <tr key={vehicle._id ?? vehicle.vehicle_number}>
-                      <td><VehicleThumb vehicle={vehicle} /></td>
-                      <td>
-                        <span className="vehicle-number-badge">{vehicle.vehicle_number}</span>
-                      </td>
-                      <td>{vehicle.vehicle_make || '—'}</td>
+                  {persons.length > 0 ? persons.map((person) => (
+                    <tr key={person._id || person.person_id}>
+                      <td>#{person.person_id}</td>
                       <td>
                         <div className="name-cell">
-                          <span className="avatar avatar-blue">
-                            {vehicle.vehicle_model?.charAt(0) || 'V'}
+                          <span className="avatar avatar-red">
+                            {person.person_name?.charAt(0) || 'P'}
                           </span>
-                          {vehicle.vehicle_model || '—'}
+                          {person.person_name}
                         </div>
                       </td>
+                      <td>{person.person_mobile}</td>
                       <td>
-                        <span className="type-badge">{vehicle.vehicle_type || '—'}</span>
+                        <span className={`status-badge ${person.alert_status ? 'active' : 'inactive'}`}>
+                          {person.alert_status ? 'Active' : 'Inactive'}
+                        </span>
                       </td>
+                      <td>{getLocationLabel(person) || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                       <td>
                         <div className="action-btns">
-                          <button
-                            className="expand-icon-btn"
-                            title="View details"
-                            onClick={() => openDetailPage(vehicle.vehicle_number)}
-                          >
+                          <button className="expand-icon-btn" title="View details"
+                            onClick={() => openDetailPage(person.person_id)}>
                             <ExpandIcon />
                           </button>
-                          <button
-                            className="edit-icon-btn"
-                            title="Edit"
-                            onClick={() => openEditModal(vehicle)}
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            className="delete-icon-btn"
-                            title="Delete"
-                            onClick={() => setDeleteTarget(vehicle)}
-                          >
+                          <button className="edit-icon-btn" title="Edit"
+                            onClick={() => openEditModal(person)}>✏️</button>
+                          <button className="delete-icon-btn" title="Delete"
+                            onClick={() => setDeleteTarget(person)}>
                             <DeleteIcon />
                           </button>
                         </div>
@@ -664,17 +578,16 @@ export default function Vehicles() {
                     <tr>
                       <td colSpan="6" className="no-data">
                         {isSearchMode
-                          ? 'No vehicles match your search criteria.'
+                          ? 'No missing persons match your search criteria.'
                           : isMyProfileMode
-                            ? "You haven't added any vehicles yet."
-                            : 'No vehicle records found.'}
+                            ? "You haven't reported any missing persons yet."
+                            : 'No missing person records found.'}
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
 
-              {/* ── Pagination ── */}
               <Pagination
                 total={total}
                 page={page}
@@ -684,28 +597,32 @@ export default function Vehicles() {
             </>
           )}
         </div>
+
       </div>
 
-      {/* Modals */}
-      <VehicleForm
+      {/* ── Create modal → POST /missingperson
+             Edit modal   → PUT /missingperson/:id
+                            (or /missingperson/:id/image when only the photo changed) ── */}
+      <MissingPersonForm
         isOpen={isModalOpen}
-        vehicle={editingVehicle}
-        isEditing={!!editingVehicle}
+        person={editingPerson}
+        isEditing={Boolean(editingPerson)}
         onClose={closeModal}
-        onSubmit={editingVehicle ? handleUpdate : handleCreate}
+        onSubmit={editingPerson ? handleUpdate : handleCreate}
         onSubmitImageOnly={handleImageOnly}
       />
 
-      <VehicleImageSearchModal
+      {/* ── Image/vector search modal → POST /search/missingperson ── */}
+      <MissingPersonImageSearchModal
         isOpen={isImageSearchOpen}
         onClose={() => setIsImageSearchOpen(false)}
       />
 
       <ConfirmDialog
         isOpen={!!deleteTarget}
-        title="Delete Vehicle?"
+        title="Delete Missing Person Record?"
         message={deleteTarget
-          ? `Are you sure you want to delete vehicle "${deleteTarget.vehicle_number}"? This action cannot be undone.`
+          ? `Are you sure you want to delete "${deleteTarget.person_name}" (ID: #${deleteTarget.person_id})? This action cannot be undone.`
           : ''}
         loading={deleteLoading}
         onConfirm={handleDeleteConfirm}
@@ -713,4 +630,6 @@ export default function Vehicles() {
       />
     </>
   );
-}
+};
+
+export default MissingPersons;

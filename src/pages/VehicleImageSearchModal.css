@@ -6,19 +6,64 @@
 
 .vis-modal-card {
   max-width: 600px;
+  max-height: 90vh;
   border-radius: 16px;
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2), 0 4px 10px rgba(15, 23, 42, 0.07);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.vis-modal-card .modal-header {
+  flex-shrink: 0;
 }
 
 .vis-modal-card .modal-hicon {
   background: linear-gradient(135deg, #fee2e2, #fecaca);
 }
 
+/* ── Scroll wiring ─────────────────────────────────────────────────────────
+   The form is a flex column; the body scrolls, header/footer stay fixed.
+   min-height: 0 is required on both the form and the scrolling body —
+   without it, flex children refuse to shrink below their content size
+   and overflow-y: auto never actually kicks in. */
+
+.vis-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .vis-body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.vis-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+}
+
+.vis-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.vis-scroll::-webkit-scrollbar-thumb {
+  background: #dbe0e8;
+  border-radius: 999px;
+}
+
+.vis-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.vis-modal-card .cf-actions {
+  flex-shrink: 0;
 }
 
 /* ── Panels (cards) ───────────────────────────────────────────────────────── */
@@ -353,6 +398,10 @@
   transition: box-shadow 0.18s ease, transform 0.18s ease, border-color 0.18s ease;
 }
 
+.vis-card-clickable {
+  cursor: pointer;
+}
+
 .vis-card:hover {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
   transform: translateY(-2px);
@@ -434,6 +483,21 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.vis-card-view-hint {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #A32D2D;
+  margin-top: 3px;
+  opacity: 0;
+  transform: translateX(-2px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.vis-card:hover .vis-card-view-hint {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .vis-empty {

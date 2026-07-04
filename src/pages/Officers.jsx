@@ -22,7 +22,7 @@ const EMPTY_FILTERS = {
 
 const PAGE_LIMIT = 10;
 
-// ── Pagination component ───────────────────────────────────────────────────
+// ── Pagination component (identical to Vehicles.jsx) ──────────────────────
 function Pagination({ total, page, limit, onPageChange }) {
   const totalPages = Math.ceil(total / limit);
   if (totalPages <= 1) return null;
@@ -47,15 +47,11 @@ function Pagination({ total, page, limit, onPageChange }) {
       background: '#fafbfc', borderRadius: '0 0 12px 12px',
       flexWrap: 'wrap', gap: 10,
     }}>
-      {/* Info */}
       <span style={{ fontSize: 12, color: '#64748b' }}>
         Showing {Math.min((page - 1) * limit + 1, total)}–{Math.min(page * limit, total)} of {total} officers
       </span>
 
-      {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-
-        {/* Previous button */}
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
@@ -73,7 +69,6 @@ function Pagination({ total, page, limit, onPageChange }) {
           ← Previous
         </button>
 
-        {/* Page numbers */}
         {getPageNumbers().map((p, idx) =>
           p === '...'
             ? (
@@ -101,7 +96,6 @@ function Pagination({ total, page, limit, onPageChange }) {
             )
         )}
 
-        {/* Next button */}
         <button
           onClick={() => onPageChange(page + 1)}
           disabled={page === totalPages}
@@ -118,7 +112,6 @@ function Pagination({ total, page, limit, onPageChange }) {
         >
           Next →
         </button>
-
       </div>
     </div>
   );
@@ -128,106 +121,104 @@ function Pagination({ total, page, limit, onPageChange }) {
 export default function Officers() {
   const navigate = useNavigate();
 
-  // All records fetched from API (never sliced)
-  const [allOfficers, setAllOfficers]     = useState([]);
+  // Only the CURRENT page's records live here — never the whole dataset
+  const [officers, setOfficers]           = useState([]);
+  const [total, setTotal]                 = useState(0);
+  const [page, setPage]                   = useState(1);
   const [loading, setLoading]             = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
   const [isSearchMode, setIsSearchMode]   = useState(false);
+  const [error, setError]                 = useState(null);
 
-  // Frontend pagination
-  const [page, setPage] = useState(1);
-
-  // filter state
   const [filters, setFilters]         = useState(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
 
-  // form modal
   const [isModalOpen, setIsModalOpen]       = useState(false);
   const [editingOfficer, setEditingOfficer] = useState(null);
 
-  // delete confirm dialog
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const activeFilterCount = Object.values(filters).filter(v => v.trim()).length;
 
-  // ── Slice allOfficers for the current page ──
-  const total          = allOfficers.length;
-  const totalPages     = Math.ceil(total / PAGE_LIMIT);
-  const pagedOfficers  = allOfficers.slice((page - 1) * PAGE_LIMIT, page * PAGE_LIMIT);
-
-  // ── Load ALL officers from API (no page/limit params) ──
-  const loadData = useCallback(async () => {
+  // ── Load ONE page from the backend — GET /officers?page=&limit=&sortBy=&order=
+  const loadData = useCallback(async (pageArg = 1) => {
     setLoading(true);
+    setError(null);
     setIsSearchMode(false);
-    setPage(1);
     try {
-      const data = await getOfficersApi();
-      setAllOfficers(Array.isArray(data) ? data : []);
+      const result = await getOfficersApi({
+        page: pageArg,
+        limit: PAGE_LIMIT,
+        sortBy: 'created_at',
+        order: 'desc',
+      });
+      setOfficers(result.data);
+      setTotal(result.total);
+      setPage(result.page);
     } catch (err) {
       console.error('Failed to load officers:', err);
+      setError(err.message || 'Failed to load officer records.');
+      setOfficers([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadData(1); }, [loadData]);
 
-  // ── Search / filter — also fetches all results, frontend paginates ──
-  const handleSearch = useCallback(async () => {
+  const setFilter = (key, val) => setFilters(prev => ({ ...prev, [key]: val }));
+
+  // ── Run search (server-side paginated) ─────────────────────────────────────
+  const runSearch = useCallback(async (pageArg = 1) => {
     const hasFilter = Object.values(filters).some(v => v.trim());
-    if (!hasFilter) { loadData(); return; }
+    if (!hasFilter) { await loadData(1); return; }
 
     setSearchLoading(true);
     setIsSearchMode(true);
-    setPage(1);
     try {
-      const data = await searchOfficersApi(filters);
-      setAllOfficers(Array.isArray(data) ? data : []);
+      const result = await searchOfficersApi({
+        officer_name:     filters.officer_name.trim(),
+        officer_surname:  filters.officer_surname.trim(),
+        officer_location: filters.officer_location.trim(),
+        page: pageArg,
+        limit: PAGE_LIMIT,
+      });
+      setOfficers(result.data);
+      setTotal(result.total);
+      setPage(result.page);
     } catch (err) {
       console.error('Officer search failed:', err);
     } finally {
       setSearchLoading(false);
-      setLoading(false);
     }
   }, [filters, loadData]);
 
-  const handleClearFilters = () => {
-    setFilters(EMPTY_FILTERS);
-    loadData();
-  };
+  const handleSearchKeyDown = (e) => { if (e.key === 'Enter') runSearch(1); };
 
-  const setFilter = (key, val) => setFilters(prev => ({ ...prev, [key]: val }));
+  const handleClearFilters = () => { setFilters(EMPTY_FILTERS); loadData(1); };
 
-  // ── Page change ──
+  // ── Page change — re-fetches from backend, no client slicing ──────────────
   const handlePageChange = (newPage) => {
-    setPage(newPage);
+    if (isSearchMode) runSearch(newPage); else loadData(newPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // ── CRUD — reload after changes, stay on same page if possible ──
+  // ── CRUD ──────────────────────────────────────────────────────────────────
   const handleCreate = async (fd) => {
     await createOfficerApi(fd);
-    await loadData();
+    await loadData(1);
   };
+
   const handleUpdate = async (fd) => {
     await updateOfficerApi(editingOfficer.officer_id, fd);
-    if (isSearchMode) {
-      await handleSearch();
-    } else {
-      await loadData();
-    }
-    // Restore page after reload
-    setPage(p => p);
+    if (isSearchMode) await runSearch(page); else await loadData(page);
   };
+
   const handleImageOnly = async (id, fd) => {
     await updateOfficerImageApi(id, fd);
-    if (isSearchMode) {
-      await handleSearch();
-    } else {
-      await loadData();
-    }
-    setPage(p => p);
+    if (isSearchMode) await runSearch(page); else await loadData(page);
   };
 
   const handleDeleteConfirm = async () => {
@@ -235,14 +226,9 @@ export default function Officers() {
     setDeleteLoading(true);
     try {
       await deleteOfficerApi(deleteTarget.officer_id);
-      // If last item on current page and not page 1, go back
-      const isLastOnPage = pagedOfficers.length === 1 && page > 1;
-      if (isSearchMode) {
-        await handleSearch();
-      } else {
-        await loadData();
-      }
-      if (isLastOnPage) setPage(p => p - 1);
+      const isLastOnPage = officers.length === 1 && page > 1;
+      const targetPage = isLastOnPage ? page - 1 : page;
+      if (isSearchMode) await runSearch(targetPage); else await loadData(targetPage);
     } catch (err) {
       console.error('Delete officer failed:', err);
     } finally {
@@ -255,6 +241,8 @@ export default function Officers() {
   const openEditModal   = (o) => { setEditingOfficer(o);   setIsModalOpen(true); };
   const closeModal      = () => { setIsModalOpen(false);   setEditingOfficer(null); };
   const openDetailPage  = (id) => navigate(`/officers/${id}`);
+
+  const isActive = loading || searchLoading;
 
   // ── Icons ──
   const ExpandIcon = () => (
@@ -306,7 +294,6 @@ export default function Officers() {
               )}
             </button>
 
-            {/* Total count badge — always visible */}
             <span className="filter-result-count">
               {isSearchMode
                 ? `${total} result${total !== 1 ? 's' : ''} found`
@@ -342,7 +329,7 @@ export default function Officers() {
                   placeholder="e.g. Aseem"
                   value={filters.officer_name}
                   onChange={e => setFilter('officer_name', e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={handleSearchKeyDown}
                 />
               </div>
 
@@ -353,7 +340,7 @@ export default function Officers() {
                   placeholder="e.g. Kaur"
                   value={filters.officer_surname}
                   onChange={e => setFilter('officer_surname', e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={handleSearchKeyDown}
                 />
               </div>
 
@@ -364,7 +351,7 @@ export default function Officers() {
                   placeholder="e.g. Delhi"
                   value={filters.officer_location}
                   onChange={e => setFilter('officer_location', e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                  onKeyDown={handleSearchKeyDown}
                 />
               </div>
 
@@ -373,8 +360,8 @@ export default function Officers() {
                 <button
                   className="add-btn filter-search-inline-btn"
                   style={{ background: 'linear-gradient(135deg,#005090,#0070c0)', whiteSpace: 'nowrap' }}
-                  onClick={handleSearch}
-                  disabled={searchLoading}
+                  onClick={() => runSearch(1)}
+                  disabled={searchLoading || activeFilterCount === 0}
                 >
                   <SearchIcon />
                   {searchLoading ? 'Searching…' : 'Search'}
@@ -386,8 +373,10 @@ export default function Officers() {
 
         {/* ── Table ── */}
         <div className="table-card">
-          {loading || searchLoading ? (
+          {isActive ? (
             <div className="loading-text">{searchLoading ? 'Searching…' : 'Loading…'}</div>
+          ) : error ? (
+            <div className="loading-text">⚠️ {error}</div>
           ) : (
             <>
               <table className="data-table">
@@ -398,7 +387,7 @@ export default function Officers() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagedOfficers.length > 0 ? pagedOfficers.map((officer) => (
+                  {officers.length > 0 ? officers.map((officer) => (
                     <tr key={officer._id ?? officer.officer_id}>
                       <td>#{officer.officer_id}</td>
                       <td>
@@ -442,7 +431,6 @@ export default function Officers() {
                 </tbody>
               </table>
 
-              {/* ── Pagination ── */}
               <Pagination
                 total={total}
                 page={page}

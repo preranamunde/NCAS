@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './CriminalImageSearchModal.css';
 import { searchCriminalsByImageApi } from '../api/authApi';
@@ -42,6 +42,25 @@ function buildImageProxyUrl(rawUrl) {
   return rawUrl.replace(/^https?:\/\/[^/]+/, '');
 }
 
+const REOPEN_STORAGE_KEY = 'cis_reopen_state';
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function dataUrlToFile(dataUrl, filename, mimeType) {
+  const [, base64] = dataUrl.split(',');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], filename, { type: mimeType });
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 export default function CriminalImageSearchModal({ isOpen, onClose }) {
   const navigate = useNavigate();
@@ -53,7 +72,7 @@ export default function CriminalImageSearchModal({ isOpen, onClose }) {
 
   const [imageVectorText, setImageVectorText] = useState('');
   const [imageVectorFile, setImageVectorFile] = useState(null);
-  const [vectorInputMode, setVectorInputMode] = useState(null); // null | 'text' | 'file'
+  const [vectorInputMode, setVectorInputMode] = useState(null);
 
   const [topK, setTopK] = useState('3');
 
@@ -62,7 +81,44 @@ export default function CriminalImageSearchModal({ isOpen, onClose }) {
   const [results, setResults] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
 
-  // ── Image upload ──
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let saved = null;
+    try {
+      const raw = sessionStorage.getItem(REOPEN_STORAGE_KEY);
+      if (raw) saved = JSON.parse(raw);
+    } catch (err) {
+      console.warn('[CriminalImageSearchModal] Failed to restore saved state:', err);
+    }
+
+    if (saved) {
+      setResults(saved.results ?? null);
+      setHasSearched(!!saved.hasSearched);
+      setTopK(saved.topK ?? '3');
+      setUseVectorSearch(!!saved.useVectorSearch);
+      setImageVectorText(saved.imageVectorText ?? '');
+      setVectorInputMode(saved.vectorInputMode ?? null);
+
+      if (saved.photoDataUrl && saved.photoFileName) {
+        try {
+          const rebuiltFile = dataUrlToFile(
+            saved.photoDataUrl,
+            saved.photoFileName,
+            saved.photoMimeType || 'image/jpeg'
+          );
+          selectedImageFileRef.current = rebuiltFile;
+          setImagePreview(saved.photoDataUrl);
+        } catch (err) {
+          console.warn('[CriminalImageSearchModal] Failed to rebuild saved photo:', err);
+        }
+      }
+
+      sessionStorage.removeItem(REOPEN_STORAGE_KEY);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
   const handleImageChange = (e) => {
     const file = e.target.files?.[0] || null;
     selectedImageFileRef.current = file;
@@ -127,12 +183,38 @@ export default function CriminalImageSearchModal({ isOpen, onClose }) {
 
   const handleClose = () => {
     resetForm();
+    try {
+      sessionStorage.removeItem(REOPEN_STORAGE_KEY);
+    } catch (err) {
+      // ignore
+    }
     onClose();
   };
 
-  // ── Navigate to criminal detail page, closing the modal first ──
-  const handleResultClick = (criminalId) => {
-    handleClose();
+  const handleResultClick = async (criminalId) => {
+    try {
+      const stateToSave = {
+        results,
+        hasSearched,
+        topK,
+        useVectorSearch,
+        imageVectorText,
+        vectorInputMode,
+      };
+
+      const photoFile = selectedImageFileRef.current;
+      if (photoFile && !useVectorSearch) {
+        stateToSave.photoDataUrl = await fileToDataUrl(photoFile);
+        stateToSave.photoFileName = photoFile.name;
+        stateToSave.photoMimeType = photoFile.type;
+      }
+
+      sessionStorage.setItem(REOPEN_STORAGE_KEY, JSON.stringify(stateToSave));
+    } catch (err) {
+      console.warn('[CriminalImageSearchModal] Failed to persist state before navigating:', err);
+    }
+
+    onClose();
     navigate(`/criminals/${criminalId}`);
   };
 
@@ -195,10 +277,10 @@ export default function CriminalImageSearchModal({ isOpen, onClose }) {
           <button className="modal-close-btn" onClick={handleClose} aria-label="Close">✕</button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="cis-form">
           {error && <div className="form-error">{error}</div>}
 
-          <div className="form-body cis-body">
+          <div className="form-body cis-body cis-scroll">
 
             {/* Photo panel */}
             <div className={`cis-panel cis-panel-photo${useVectorSearch ? ' cis-panel-disabled' : ''}`}>

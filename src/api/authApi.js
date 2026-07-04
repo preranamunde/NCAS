@@ -96,18 +96,70 @@ export async function getMyProfileApi() {
   return data.data ?? data;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Criminal Profile APIs
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function getCriminalsApi() {
-  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.CRIMINALS}`, {
+/**
+ * Read ANY officer by id — GET /officer/:id
+ */
+export async function getOfficerByIdApi(officerId) {
+  if (!officerId) throw new Error('officerId is required.');
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.OFFICER_BY_ID(officerId)}`, {
     headers: authHeaders(),
   });
   const data = await parseJSON(res);
   await throwIfError(res);
   return data.data ?? data;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Criminal Profile APIs
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getCriminalsApi(opts = {}) {
+  const {
+    page   = 1,
+    limit  = 10,
+    sortBy = 'created_at',
+    order  = 'desc',
+  } = opts;
+
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+    sortBy,
+    order,
+  });
+
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.CRIMINALS}?${params.toString()}`, {
+    headers: authHeaders(),
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+
+  return {
+    data:  Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [],
+    total: Number(data.total ?? data.count ?? (Array.isArray(data.data) ? data.data.length : 0)),
+    page:  Number(data.page ?? page),
+    limit: Number(data.limit ?? limit),
+  };
+}
+
+/**
+ * "Read Profiles by Officer" — GET /profiles/officer/:officerId?page=&limit=&sortBy=&order=
+ */
+export async function getCriminalsByOfficerApi(officerId, opts = {}) {
+  if (!officerId) throw new Error('officerId is required.');
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.CRIMINALS_BY_OFFICER(officerId, opts)}`, {
+    headers: authHeaders(),
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+  return {
+    data:  Array.isArray(data.data) ? data.data : [],
+    total: Number(data.total ?? data.count ?? 0),
+    page:  Number(data.page ?? opts.page ?? 1),
+    limit: Number(data.limit ?? opts.limit ?? 10),
+  };
+}
+
 
 export async function createCriminalApi(formData) {
   const res = await fetch(`${API_BASE_URL}${ENDPOINTS.CRIMINAL}`, {
@@ -171,6 +223,10 @@ export async function searchCriminalsApi({
   alert_status      = '',
   state_code        = '',
   district_code     = '',
+  page  = 1,
+  limit = 10,
+  sortBy = 'criminal_id',
+  order  = 'desc',
 } = {}) {
   const params = new URLSearchParams();
   if (set_by_officer_id.trim()) params.append('set_by_officer_id', set_by_officer_id.trim());
@@ -179,12 +235,21 @@ export async function searchCriminalsApi({
   if (alert_status !== '')      params.append('alert_status',      alert_status);
   if (state_code.trim())        params.append('state_code',        state_code.trim());
   if (district_code.trim())     params.append('district_code',     district_code.trim());
+  params.append('page', String(page));
+  params.append('limit', String(limit));
+  params.append('sortBy', sortBy);
+  params.append('order', order);
 
   const url = `${API_BASE_URL}${ENDPOINTS.CRIMINAL_SEARCH}?${params.toString()}`;
   const res = await fetch(url, { headers: authHeaders() });
   const data = await parseJSON(res);
   await throwIfError(res);
-  return Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+  return {
+    data:  Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [],
+    total: Number(data.total ?? data.count ?? (Array.isArray(data.data) ? data.data.length : 0)),
+    page:  Number(data.page ?? page),
+    limit: Number(data.limit ?? limit),
+  };
 }
 
 export async function searchCriminalsByImageApi(formData) {
@@ -205,13 +270,36 @@ export async function searchCriminalsByImageApi(formData) {
 // Officer APIs
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function getOfficersApi() {
-  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.OFFICERS}`, {
+/**
+ * Paginated — GET /officers?page=&limit=&sortBy=&order=
+ */
+export async function getOfficersApi(opts = {}) {
+  const {
+    page   = 1,
+    limit  = 10,
+    sortBy = 'created_at',
+    order  = 'desc',
+  } = opts;
+
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+    sortBy,
+    order,
+  });
+
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.OFFICERS}?${params.toString()}`, {
     headers: authHeaders(),
   });
   const data = await parseJSON(res);
   await throwIfError(res);
-  return data.data ?? data;
+
+  return {
+    data:  Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [],
+    total: Number(data.total ?? data.count ?? (Array.isArray(data.data) ? data.data.length : 0)),
+    page:  Number(data.page ?? page),
+    limit: Number(data.limit ?? limit),
+  };
 }
 
 export async function createOfficerApi(formData) {
@@ -266,8 +354,7 @@ export async function getOfficerImageApi(id) {
 }
 
 /**
- * Search officers by filter fields.
- * Fetches all matching results (limit=1000) — frontend handles pagination.
+ * Paginated — GET /search/officers?...&page=&limit=&sortBy=&order=
  */
 export async function searchOfficersApi({
   officer_name        = '',
@@ -276,6 +363,10 @@ export async function searchOfficersApi({
   officer_dept        = '',
   officer_hqrs        = '',
   officer_location    = '',
+  page  = 1,
+  limit = 10,
+  sortBy = 'officer_id',
+  order  = 'desc',
 } = {}) {
   const params = new URLSearchParams();
   if (officer_name.trim())        params.append('officer_name',        officer_name.trim());
@@ -284,30 +375,70 @@ export async function searchOfficersApi({
   if (officer_dept.trim())        params.append('officer_dept',        officer_dept.trim());
   if (officer_hqrs.trim())        params.append('officer_hqrs',        officer_hqrs.trim());
   if (officer_location.trim())    params.append('officer_location',    officer_location.trim());
-  // fetch all results — frontend handles pagination
-  params.append('page',   '1');
-  params.append('limit',  '1000');
-  params.append('sortBy', 'officer_id');
-  params.append('order',  'desc');
+  params.append('page',   String(page));
+  params.append('limit',  String(limit));
+  params.append('sortBy', sortBy);
+  params.append('order',  order);
 
   const url = `${API_BASE_URL}${ENDPOINTS.OFFICER_SEARCH}?${params.toString()}`;
   const res = await fetch(url, { headers: authHeaders() });
   const data = await parseJSON(res);
   await throwIfError(res);
-  return Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+
+  return {
+    data:  Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [],
+    total: Number(data.total ?? data.count ?? (Array.isArray(data.data) ? data.data.length : 0)),
+    page:  Number(data.page ?? page),
+    limit: Number(data.limit ?? limit),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vehicle APIs
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function getVehiclesApi() {
-  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.VEHICLES}`, {
+export async function getVehiclesApi(opts = {}) {
+  const {
+    page   = 1,
+    limit  = 10,
+    sortBy = 'created_at',
+    order  = 'desc',
+  } = opts;
+
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+    sortBy,
+    order,
+  });
+
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.VEHICLES}?${params.toString()}`, {
     headers: authHeaders(),
   });
   const data = await parseJSON(res);
   await throwIfError(res);
-  return data.data ?? data;
+
+  return {
+    data:  Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [],
+    total: Number(data.total ?? data.count ?? (Array.isArray(data.data) ? data.data.length : 0)),
+    page:  Number(data.page ?? page),
+    limit: Number(data.limit ?? limit),
+  };
+}
+
+export async function getVehiclesByOfficerApi(officerId, opts = {}) {
+  if (!officerId) throw new Error('officerId is required.');
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.VEHICLES_BY_OFFICER(officerId, opts)}`, {
+    headers: authHeaders(),
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+  return {
+    data:  Array.isArray(data.data) ? data.data : [],
+    total: Number(data.total ?? data.count ?? 0),
+    page:  Number(data.page ?? opts.page ?? 1),
+    limit: Number(data.limit ?? opts.limit ?? 10),
+  };
 }
 
 export async function getVehicleByIdApi(vehicleNumber) {
@@ -379,6 +510,10 @@ export async function searchVehiclesApi({
   vehicle_district = '',
   vehicle_type     = '',
   alert_status     = '',
+  page  = 1,
+  limit = 10,
+  sortBy = 'vehicle_number',
+  order  = 'desc',
 } = {}) {
   const params = new URLSearchParams();
   if (set_by_officer.trim())   params.append('set_by_officer',   set_by_officer.trim());
@@ -389,12 +524,21 @@ export async function searchVehiclesApi({
   if (vehicle_district.trim()) params.append('vehicle_district', vehicle_district.trim());
   if (vehicle_type.trim())     params.append('vehicle_type',     vehicle_type.trim());
   if (alert_status !== '')     params.append('alert_status',     alert_status);
+  params.append('page', String(page));
+  params.append('limit', String(limit));
+  params.append('sortBy', sortBy);
+  params.append('order', order);
 
   const url = `${API_BASE_URL}${ENDPOINTS.VEHICLE_SEARCH}?${params.toString()}`;
   const res = await fetch(url, { headers: authHeaders() });
   const data = await parseJSON(res);
   await throwIfError(res);
-  return Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [];
+  return {
+    data:  Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [],
+    total: Number(data.total ?? data.count ?? (Array.isArray(data.data) ? data.data.length : 0)),
+    page:  Number(data.page ?? page),
+    limit: Number(data.limit ?? limit),
+  };
 }
 
 export async function searchVehiclesByImageApi(formData) {
@@ -413,6 +557,8 @@ export async function searchVehiclesByImageApi(formData) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vehicle-Profile Mapping APIs
+// NOTE: backend does not accept page/limit/sortBy/order on any of these routes
+// (confirmed against Postman collection). Not paginated — reads everything.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getVehicleMappingsApi() {
@@ -465,6 +611,202 @@ export async function deleteVehicleMappingApi(id) {
   });
   await throwIfError(res);
   return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Missing Person APIs
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Paginated — GET /missingpersons?page=&limit=&sortBy=&order=
+ * Returns { data, total, page, limit } — same shape as vehicles/officers.
+ */
+export async function getMissingPersonsApi(opts = {}) {
+  const {
+    page   = 1,
+    limit  = 10,
+    sortBy = 'created_at',
+    order  = 'desc',
+  } = opts;
+
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+    sortBy,
+    order,
+  });
+
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.MISSING_PERSONS}?${params.toString()}`, {
+    headers: authHeaders(),
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+
+  return {
+    data:  Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [],
+    total: Number(data.total ?? data.count ?? (Array.isArray(data.data) ? data.data.length : 0)),
+    page:  Number(data.page ?? page),
+    limit: Number(data.limit ?? limit),
+  };
+}
+
+/**
+ * "Read Persons by Officer" — GET /missingpersons/officer/:officerId?page=&limit=&sortBy=&order=
+ * Returns { data, total, page, limit }.
+ */
+export async function getMissingPersonsByOfficerApi(officerId, opts = {}) {
+  if (!officerId) throw new Error('officerId is required.');
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.MISSING_PERSONS_BY_OFFICER(officerId, opts)}`, {
+    headers: authHeaders(),
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+  return {
+    data:  Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [],
+    total: Number(data.total ?? data.count ?? (Array.isArray(data.data) ? data.data.length : 0)),
+    page:  Number(data.page ?? opts.page ?? 1),
+    limit: Number(data.limit ?? opts.limit ?? 10),
+  };
+}
+
+export async function getMissingPersonByIdApi(id) {
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.MISSING_PERSON_BY_ID(id)}`, {
+    headers: authHeaders(),
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+  return data.data ?? data;
+}
+
+export async function createMissingPersonApi(formData) {
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.MISSING_PERSON}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData,
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+  return data;
+}
+
+export async function updateMissingPersonApi(id, formData) {
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.MISSING_PERSON_BY_ID(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: formData,
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+  return data;
+}
+
+export async function updateMissingPersonImageApi(id, formData) {
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.MISSING_PERSON_IMAGE_BY_ID(id)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: formData,
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+  return data;
+}
+
+export async function getMissingPersonImageApi(id) {
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.MISSING_PERSON_IMAGE_BY_ID(id)}`, {
+    headers: authHeaders(),
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+  return data.person_image_url ?? data.image_url ?? null;
+}
+
+export async function deleteMissingPersonApi(id) {
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.MISSING_PERSON_BY_ID(id)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  await throwIfError(res);
+  return true;
+}
+
+/**
+ * Paginated — GET /search/missingpersons?...&page=&limit=&sortBy=&order=
+ * Returns { data, total, page, limit }.
+ */
+export async function searchMissingPersonsApi({
+  person_name    = '',
+  person_mobile  = '',
+  alert_status   = '',
+  state_code     = '',
+  district_code  = '',
+  page  = 1,
+  limit = 10,
+  sortBy = 'person_name',
+  order  = 'desc',
+} = {}) {
+  const params = new URLSearchParams();
+  if (person_name.trim())    params.append('person_name',    person_name.trim());
+  if (person_mobile.trim())  params.append('person_mobile',  person_mobile.trim());
+  if (alert_status !== '')   params.append('alert_status',   alert_status);
+  if (state_code.trim())     params.append('state_code',     state_code.trim());
+  if (district_code.trim())  params.append('district_code',  district_code.trim());
+  params.append('page',   String(page));
+  params.append('limit',  String(limit));
+  params.append('sortBy', sortBy);
+  params.append('order',  order);
+
+  const url = `${API_BASE_URL}${ENDPOINTS.MISSING_PERSON_SEARCH}?${params.toString()}`;
+  const res = await fetch(url, { headers: authHeaders() });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+
+  return {
+    data:  Array.isArray(data.data) ? data.data : Array.isArray(data) ? data : [],
+    total: Number(data.total ?? data.count ?? (Array.isArray(data.data) ? data.data.length : 0)),
+    page:  Number(data.page ?? page),
+    limit: Number(data.limit ?? limit),
+  };
+}
+
+/**
+ * Paginated — POST /search/missingperson (multipart, topK + page/limit/sortBy/order in body)
+ * Returns { data, total, page, limit }.
+ */
+export async function searchMissingPersonsByImageApi(formData, opts = {}) {
+  const {
+    page  = 1,
+    limit = 10,
+    sortBy = 'created_at',
+    order  = 'desc',
+  } = opts;
+
+  // Ensure pagination fields are present on the outgoing form data
+  if (formData instanceof FormData) {
+    if (!formData.has('page'))   formData.append('page', String(page));
+    if (!formData.has('limit'))  formData.append('limit', String(limit));
+    if (!formData.has('sortBy')) formData.append('sortBy', sortBy);
+    if (!formData.has('order'))  formData.append('order', order);
+  }
+
+  const res = await fetch(`${API_BASE_URL}${ENDPOINTS.MISSING_PERSON_IMAGE_SEARCH}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData,
+  });
+  const data = await parseJSON(res);
+  await throwIfError(res);
+
+  const results = Array.isArray(data.results) ? data.results
+                 : Array.isArray(data.data)    ? data.data
+                 : Array.isArray(data)         ? data
+                 : [];
+
+  return {
+    data:  results,
+    total: Number(data.total ?? data.count ?? results.length),
+    page:  Number(data.page ?? page),
+    limit: Number(data.limit ?? limit),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

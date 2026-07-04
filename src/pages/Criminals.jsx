@@ -7,6 +7,7 @@ import CriminalImageSearchModal from './CriminalImageSearchModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import {
   getCriminalsApi,
+  getCriminalsByOfficerApi,
   createCriminalApi,
   updateCriminalApi,
   updateCriminalImageApi,
@@ -58,6 +59,21 @@ const ImageSearchIcon = () => (
     <path d="M2 14l3.5-3.5L9 14"/>
     <circle cx="17.5" cy="17.5" r="3.2"/>
     <line x1="19.8" y1="19.8" x2="22" y2="22"/>
+  </svg>
+);
+
+const ProfileIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="8" r="4"/>
+    <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/>
+  </svg>
+);
+
+const BackIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="15 18 9 12 15 6"/>
   </svg>
 );
 
@@ -170,14 +186,16 @@ const PAGE_LIMIT = 10;
 const Criminals = () => {
   const navigate = useNavigate();
 
-  // All records fetched from API (never sliced)
-  const [allCriminals, setAllCriminals] = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [isSearchMode, setIsSearchMode] = useState(false);
+  // Current page of records, as returned by the backend (never sliced client-side)
+  const [items, setItems]   = useState([]);
+  const [total, setTotal]   = useState(0);
+  const [page, setPage]     = useState(1);
 
-  // Frontend pagination
-  const [page, setPage] = useState(1);
+  const [loading, setLoading]             = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  // 'all' | 'search' | 'myProfile'
+  const [viewMode, setViewMode] = useState('all');
 
   // Filter panel state
   const [showFilters, setShowFilters] = useState(false);
@@ -202,27 +220,51 @@ const Criminals = () => {
     (v) => v.trim ? v.trim() !== '' : v !== ''
   ).length;
 
-  // Slice allCriminals for the current page
-  const total         = allCriminals.length;
-  const pagedCriminals = allCriminals.slice((page - 1) * PAGE_LIMIT, page * PAGE_LIMIT);
+  const isSearchMode    = viewMode === 'search';
+  const isMyProfileMode = viewMode === 'myProfile';
 
-  // ── Load ALL records ──────────────────────────────────────────────────────
-  const loadData = useCallback(async () => {
+  // ── Load a page of ALL records ────────────────────────────────────────────
+  const loadAll = useCallback(async (targetPage = 1) => {
     setLoading(true);
-    setIsSearchMode(false);
-    setPage(1);
     try {
-      const data = await getCriminalsApi();
-      setAllCriminals(Array.isArray(data) ? data : []);
+      const res = await getCriminalsApi({ page: targetPage, limit: PAGE_LIMIT });
+      setItems(res.data);
+      setTotal(res.total);
+      setPage(res.page);
+      setViewMode('all');
     } catch (err) {
       console.error('Failed to load criminals:', err);
-      setAllCriminals([]);
+      setItems([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadAll(1); }, [loadAll]);
+
+  // ── Load a page of the logged-in officer's own criminals ("My Profile") ───
+  const loadMyProfile = useCallback(async (targetPage = 1) => {
+    const officerId = localStorage.getItem('officerId');
+    if (!officerId) {
+      console.error('No officer ID found. Please login again.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await getCriminalsByOfficerApi(officerId, { page: targetPage, limit: PAGE_LIMIT });
+      setItems(res.data);
+      setTotal(res.total);
+      setPage(res.page);
+      setViewMode('myProfile');
+    } catch (err) {
+      console.error('Failed to load my profile criminals:', err);
+      setItems([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   // ── Handle individual filter field change ─────────────────────────────────
   const handleFilterChange = (field, value) => {
@@ -240,40 +282,50 @@ const Criminals = () => {
   // ── Clear all filters and reload ──────────────────────────────────────────
   const handleClearFilters = () => {
     setFilters(EMPTY_FILTERS);
-    loadData();
+    loadAll(1);
   };
 
-  // ── Run search ────────────────────────────────────────────────────────────
-  const runSearch = useCallback(async () => {
+  // ── Run search (paginated) ─────────────────────────────────────────────────
+  const runSearch = useCallback(async (targetPage = 1) => {
     const hasAny = Object.values(filters).some((v) => v.trim ? v.trim() !== '' : v !== '');
-    if (!hasAny) { await loadData(); return; }
+    if (!hasAny) { await loadAll(1); return; }
 
     setSearchLoading(true);
-    setIsSearchMode(true);
-    setPage(1);
     try {
       const params = {
         criminal_id:       filters.criminal_id.trim(),
         criminal_name:     filters.criminal_name.trim(),
         set_by_officer_id: filters.set_by_officer_id.trim(),
         alert_status:      filters.alert_status,
+        page:  targetPage,
+        limit: PAGE_LIMIT,
       };
-      const results = await searchCriminalsApi(params);
-      setAllCriminals(Array.isArray(results) ? results : []);
+      const res = await searchCriminalsApi(params);
+      setItems(res.data);
+      setTotal(res.total);
+      setPage(res.page);
+      setViewMode('search');
     } catch (err) {
       console.error('Search failed:', err);
     } finally {
       setSearchLoading(false);
     }
-  }, [filters, loadData]);
+  }, [filters, loadAll]);
 
   const handleSearchKeyDown = (e) => {
-    if (e.key === 'Enter') runSearch();
+    if (e.key === 'Enter') runSearch(1);
   };
+
+  // ── Refresh whatever view is currently active ──────────────────────────────
+  const refreshCurrent = useCallback(async (targetPage) => {
+    if (viewMode === 'search')    return runSearch(targetPage);
+    if (viewMode === 'myProfile') return loadMyProfile(targetPage);
+    return loadAll(targetPage);
+  }, [viewMode, runSearch, loadMyProfile, loadAll]);
 
   // ── Page change ──────────────────────────────────────────────────────────
   const handlePageChange = (newPage) => {
-    setPage(newPage);
+    refreshCurrent(newPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -281,7 +333,7 @@ const Criminals = () => {
   const handleCreate = async (formData) => {
     try {
       await createCriminalApi(formData);
-      await loadData();
+      await refreshCurrent(1);
       closeModal();
     } catch (err) { console.error('Create criminal failed:', err); }
   };
@@ -289,8 +341,7 @@ const Criminals = () => {
   const handleUpdate = async (formData) => {
     try {
       await updateCriminalApi(editingCriminal.criminal_id, formData);
-      if (isSearchMode) await runSearch(); else await loadData();
-      setPage(p => p);
+      await refreshCurrent(page);
       closeModal();
     } catch (err) { console.error('Update criminal failed:', err); }
   };
@@ -298,8 +349,7 @@ const Criminals = () => {
   const handleImageOnly = async (criminalId, formData) => {
     try {
       await updateCriminalImageApi(criminalId, formData);
-      if (isSearchMode) await runSearch(); else await loadData();
-      setPage(p => p);
+      await refreshCurrent(page);
     } catch (err) { console.error('Image update failed:', err); }
   };
 
@@ -308,9 +358,8 @@ const Criminals = () => {
     setDeleteLoading(true);
     try {
       await deleteCriminalApi(deleteTarget.criminal_id);
-      const isLastOnPage = pagedCriminals.length === 1 && page > 1;
-      if (isSearchMode) await runSearch(); else await loadData();
-      if (isLastOnPage) setPage(p => p - 1);
+      const isLastOnPage = items.length === 1 && page > 1;
+      await refreshCurrent(isLastOnPage ? page - 1 : page);
     } catch (err) { console.error('Delete criminal failed:', err); }
     finally { setDeleteLoading(false); setDeleteTarget(null); }
   };
@@ -321,6 +370,12 @@ const Criminals = () => {
   const openDetailPage  = (id) => navigate(`/criminals/${id}`);
 
   const isActive = loading || searchLoading;
+
+  const modeLabel = isSearchMode
+    ? `${total} result${total !== 1 ? 's' : ''} found`
+    : isMyProfileMode
+      ? `${total} criminal${total !== 1 ? 's' : ''} added by you`
+      : `${total} criminal${total !== 1 ? 's' : ''} total`;
 
   return (
     <>
@@ -343,14 +398,26 @@ const Criminals = () => {
             </button>
 
             {/* Total count badge — always visible */}
-            <span className="filter-result-count">
-              {isSearchMode
-                ? `${total} result${total !== 1 ? 's' : ''} found`
-                : `${total} criminal${total !== 1 ? 's' : ''} total`}
-            </span>
+            <span className="filter-result-count">{modeLabel}</span>
+
+            {viewMode !== 'all' && (
+              <button
+                className="filter-clear-link"
+                onClick={handleClearFilters}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                <BackIcon /> Back to all criminals
+              </button>
+            )}
           </div>
 
           <div className="criminals-header-right" style={{ display: 'flex', gap: 10 }}>
+            <button
+              className={`add-btn search-trigger-btn${isMyProfileMode ? ' filter-toggle-btn--active' : ''}`}
+              onClick={() => loadMyProfile(1)}
+            >
+              <ProfileIcon /> My Profile
+            </button>
             <button
               className="add-btn search-trigger-btn"
               onClick={() => setIsImageSearchOpen(true)}
@@ -447,7 +514,7 @@ const Criminals = () => {
                 <button
                   className="add-btn filter-search-inline-btn"
                   style={{ background: 'linear-gradient(135deg,#005090,#0070c0)', whiteSpace: 'nowrap' }}
-                  onClick={runSearch}
+                  onClick={() => runSearch(1)}
                   disabled={searchLoading || activeFilterCount === 0}
                 >
                   <SearchIcon />
@@ -482,7 +549,7 @@ const Criminals = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {pagedCriminals.length > 0 ? pagedCriminals.map((criminal) => (
+                  {items.length > 0 ? items.map((criminal) => (
                     <tr key={criminal._id || criminal.criminal_id}>
                       <td>#{criminal.criminal_id}</td>
                       <td>
@@ -519,7 +586,9 @@ const Criminals = () => {
                       <td colSpan="5" className="no-data">
                         {isSearchMode
                           ? 'No criminals match your search criteria.'
-                          : 'No criminal records found.'}
+                          : isMyProfileMode
+                            ? "You haven't added any criminal profiles yet."
+                            : 'No criminal records found.'}
                       </td>
                     </tr>
                   )}
